@@ -1,1 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Speed Reader">
+  
+  <title>RSVP Reader</title>
+  
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' style='background: %23111827;'><text y='70' x='50' font-size='80' text-anchor='middle'>⚡️</text></svg>">
 
+  <style>
+    :root {
+      --bg-color: #f0f2f5;
+      --card-bg: #ffffff;
+      --text-color: #1f2937;
+      --accent-color: #e11d48;
+      --guide-color: #e5e7eb;
+      --subtle-text: #6b7280;
+      --safe-top: env(safe-area-inset-top, 20px);
+      --safe-bottom: env(safe-area-inset-bottom, 20px);
+    }
+
+    body.fullscreen-mode {
+      --bg-color: #000000;
+      --card-bg: #111111;
+      --text-color: #f3f4f6;
+      --guide-color: #333333;
+    }
+    
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh; 
+      margin: 0;
+      background: var(--bg-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      padding: 20px;
+      padding-top: max(20px, var(--safe-top));
+      padding-bottom: max(20px, var(--safe-bottom));
+      box-sizing: border-box;
+      transition: background 0.3s ease;
+      overscroll-behavior: none; 
+    }
+
+    .header-bar {
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      z-index: 20;
+      transition: opacity 0.3s;
+    }
+
+    /* Fixed header in full screen so it's always tappable */
+    body.fullscreen-mode .header-bar {
+      position: fixed;
+      top: max(10px, var(--safe-top));
+      left: 0;
+      right: 0;
+      padding: 0 20px;
+      opacity: 0.2; /* Dim but visible */
+      pointer-events: auto; /* Ensure it can be clicked */
+    }
+    
+    body.fullscreen-mode .header-bar:active,
+    body.fullscreen-mode .header-bar:hover {
+      opacity: 1;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: var(--text-color);
+    }
+
+    .icon-btn {
+      background: rgba(128, 128, 128, 0.1);
+      border: none;
+      cursor: pointer;
+      padding: 10px; 
+      border-radius: 50%;
+      color: var(--text-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .icon-btn:active { background: rgba(0,0,0,0.2); }
+    body.fullscreen-mode .icon-btn { background: rgba(255,255,255,0.15); }
+    
+    .reader-container {
+      position: relative;
+      width: 100%;
+      max-width: 600px;
+      height: 120px;
+      background: var(--card-bg);
+      border-radius: 12px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.05);
+      transition: all 0.3s ease;
+      cursor: pointer; /* Indicate it's clickable */
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body.fullscreen-mode .reader-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100dvh; 
+      max-width: none;
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+      background: transparent;
+      z-index: 5; 
+      margin: 0;
+      padding-bottom: 100px; 
+      box-sizing: border-box;
+    }
+    
+    body.fullscreen-mode .controls-area {
+      opacity: 0;
+      pointer-events: none; 
+      transition: opacity 0.3s;
+    }
+
+    .guide-line-top, .guide-line-bottom {
+      position: absolute;
+      left: 35%; 
+      width: 2px;
+      background: var(--guide-color);
+      transform: translateX(-50%);
+      z-index: 0;
+      height: 20px;
+    }
+    .guide-line-top { top: 0; }
+    .guide-line-bottom { bottom: 0; }
+
+    body.fullscreen-mode .guide-line-top { top: 30%; }
+    body.fullscreen-mode .guide-line-bottom { bottom: 30%; }
+
+    #display {
+      display: flex;
+      align-items: baseline; 
+      width: 100%;
+      font-size: 2.5rem; 
+      line-height: 1;
+      font-weight: 600;
+      color: var(--text-color);
+      z-index: 1;
+      user-select: none;
+      font-family: 'Courier New', Courier, monospace; 
+      transition: font-size 0.3s ease;
+      text-size-adjust: none;
+      -webkit-text-size-adjust: none;
+    }
+
+    body.fullscreen-mode #display {
+      font-size: 3.5rem; 
+    }
+
+    #word-left { width: 35%; text-align: right; white-space: pre; }
+    #word-pivot { color: var(--accent-color); width: auto; text-align: center; }
+    #word-right { width: 65%; text-align: left; white-space: pre; }
+
+    .controls-area {
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      z-index: 10;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100px;
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 16px; 
+      resize: none; 
+      font-family: inherit;
+      box-sizing: border-box;
+      -webkit-appearance: none;
+    }
+    textarea:focus { outline: none; border-color: var(--text-color); }
+
+    .action-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; }
+
+    button.control-btn {
+      flex: 1; 
+      padding: 14px; 
+      cursor: pointer;
+      background: #111827;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button.control-btn:active { transform: scale(0.98); }
+
+    .btn-reset { background: #ef4444 !important; flex: 0 0 auto; }
+    .btn-clear { background: #ffffff !important; color: #374151 !important; border: 1px solid #d1d5db !important; flex: 0 0 auto; }
+    
+    .setting-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-color);
+      font-weight: 500;
+      width: 100%;
+      justify-content: space-between;
+      background: var(--card-bg);
+      padding: 10px;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+    
+    input[type="number"] {
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+      width: 80px;
+      font-size: 16px; 
+      text-align: center;
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .progress-wrapper {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .progress-container {
+      flex-grow: 1;
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--accent-color);
+      transition: width 0.1s linear;
+    }
+
+    #wake-status {
+      font-size: 0.75rem;
+      color: var(--accent-color);
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+    #wake-status.active { opacity: 1; }
+
+    #ios-prompt {
+        display: none;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        padding: 15px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        font-size: 0.9rem;
+        color: #4b5563;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    
+    @media (max-width: 480px) {
+      body.fullscreen-mode #display { font-size: 2.8rem; }
+      h1 { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="ios-prompt">
+    📲 <strong>Install App:</strong> Tap <span style="font-size:1.2em">share icon</span> below, then "Add to Home Screen" for the best experience.
+  </div>
+
+  <div class="header-bar">
+    <h1>RSVP Reader</h1>
+    <button id="fullscreenBtn" class="icon-btn" title="Toggle Full Screen">
+      <!-- Icon SVG will be swapped by JS -->
+      <svg id="icon-maximize" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="reader-container" id="readerContainer">
+    <div class="guide-line-top"></div>
+    <div class="guide-line-bottom"></div>
+    <div id="display">
+      <span id="word-left">Rea</span><span id="word-pivot">d</span><span id="word-right">y</span>
+    </div>
+  </div>
+
+  <div class="controls-area">
+    <div class="progress-wrapper">
+      <div class="progress-container">
+        <div id="progress-bar"></div>
+      </div>
+      <div id="wpm-display" style="font-size:0.85rem; color:#6b7280; width:40px; text-align:right;">0%</div>
+    </div>
+    
+    <div style="text-align: right; height: 15px;">
+      <span id="wake-status">Screen Awake</span>
+    </div>
+
+    <div class="textarea-wrapper">
+      <textarea id="input" placeholder="Paste your text here...">The quick brown fox jumps over the lazy dog. 
+
+When in Full Screen mode:
+- Tap the text directly to pause/play.
+- Tap the empty background to exit full screen.
+- Or tap the icon in the top right to exit.</textarea>
+    </div>
+
+    <div class="action-bar">
+      <div class="setting-group">
+        <label for="wpm">Speed (WPM):</label>
+        <input type="number" id="wpm" value="300" step="50" min="100" max="2000" inputmode="numeric" />
+      </div>
+
+      <div class="btn-group">
+        <button id="toggleBtn" class="control-btn">Start Reading</button>
+        <button id="resetBtn" class="control-btn btn-reset">Reset</button>
+        <button id="clearBtn" class="control-btn btn-clear">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    class RSVPReader {
+      constructor() {
+        this.words = [];
+        this.index = 0;
+        this.timer = null;
+        this.isPlaying = false;
+        this.wakeLock = null;
+        
+        // DOM Elements
+        this.input = document.getElementById('input');
+        this.wpmInput = document.getElementById('wpm');
+        this.toggleBtn = document.getElementById('toggleBtn');
+        this.resetBtn = document.getElementById('resetBtn');
+        this.clearBtn = document.getElementById('clearBtn');
+        this.fullscreenBtn = document.getElementById('fullscreenBtn');
+        this.readerContainer = document.getElementById('readerContainer');
+        this.progressBar = document.getElementById('progress-bar');
+        this.wpmDisplay = document.getElementById('wpm-display');
+        this.wakeStatus = document.getElementById('wake-status');
+        this.iosPrompt = document.getElementById('ios-prompt');
+        
+        this.elLeft = document.getElementById('word-left');
+        this.elPivot = document.getElementById('word-pivot');
+        this.elRight = document.getElementById('word-right');
+
+        // Check if running in browser on iOS to show prompt
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const isStandalone = window.navigator.standalone || (window.matchMedia('(display-mode: standalone)').matches);
+        
+        if (isIOS && !isStandalone) {
+            this.iosPrompt.style.display = 'block';
+        }
+
+        // Bindings
+        this.toggleBtn.onclick = () => this.toggle();
+        this.resetBtn.onclick = () => this.reset();
+        this.clearBtn.onclick = () => this.clearText();
+        this.fullscreenBtn.onclick = () => this.toggleFullScreen();
+        
+        // Tap text to play/pause
+        this.readerContainer.onclick = (e) => {
+            e.stopPropagation(); // Prevent background click from firing
+            this.toggle();
+        };
+
+        // Touch background to exit full screen
+        document.body.addEventListener('click', (e) => {
+            if (document.body.classList.contains('fullscreen-mode') && 
+                !e.target.closest('.reader-container') && 
+                !e.target.closest('.header-bar')) {
+                this.toggleFullScreen();
+            }
+        });
+        
+        // Spacebar control
+        document.addEventListener('keydown', (e) => {
+          if (e.code === 'Space' && document.activeElement !== this.input) {
+            e.preventDefault();
+            this.toggle();
+          }
+          if (e.code === 'Escape' && document.body.classList.contains('fullscreen-mode')) {
+            this.toggleFullScreen();
+          }
+        });
+
+        // Re-acquire wake lock if tab visibility changes
+        document.addEventListener('visibilitychange', async () => {
+          if (this.wakeLock !== null && document.visibilityState === 'visible') {
+            await this.requestWakeLock();
+          }
+        });
+      }
+
+      /* --- WAKE LOCK (SCREEN PERSISTENCE) --- */
+      async requestWakeLock() {
+        try {
+          if ('wakeLock' in navigator) {
+            this.wakeLock = await navigator.wakeLock.request('screen');
+            this.wakeStatus.classList.add('active');
+          }
+        } catch (err) {
+          console.log("Wake Lock not supported or blocked");
+        }
+      }
+
+      releaseWakeLock() {
+        if (this.wakeLock !== null) {
+          this.wakeLock.release()
+            .then(() => {
+              this.wakeLock = null;
+              this.wakeStatus.classList.remove('active');
+            });
+        }
+      }
+
+      /* --- FULL SCREEN (iOS Compatible) --- */
+      toggleFullScreen() {
+        const isFullscreen = document.body.classList.contains('fullscreen-mode');
+        
+        if (!isFullscreen) {
+            // Enter Fullscreen
+            document.body.classList.add('fullscreen-mode');
+            
+            // Swap icon to Minimize
+            this.fullscreenBtn.innerHTML = `
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3v3h-3m18-3v3h-3m0 18v-3h3m-18 3v-3h-3"/>
+              </svg>
+            `;
+            
+            // Try standard API if available
+            if (document.documentElement.requestFullscreen) {
+                 document.documentElement.requestFullscreen().catch(e => console.log(e));
+            }
+        } else {
+            // Exit Fullscreen
+            document.body.classList.remove('fullscreen-mode');
+            
+            // Swap icon back to Maximize
+            this.fullscreenBtn.innerHTML = `
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+              </svg>
+            `;
+            
+            // Try standard API if available
+            if (document.fullscreenElement) {
+                 document.exitFullscreen().catch(e => console.log(e));
+            }
+        }
+      }
+
+      /* --- CORE READER LOGIC --- */
+      processText() {
+        const text = this.input.value.trim();
+        return text ? text.split(/\s+/).filter(w => w.length > 0) : [];
+      }
+
+      getPivotIndex(word) {
+        const len = word.length;
+        if (len === 1) return 0;
+        let idx = Math.floor(len * 0.35); 
+        if (len >= 2 && len <= 5) idx = 1; 
+        return idx;
+      }
+
+      renderWord(word) {
+        if (!word) word = "";
+        const pivotIdx = this.getPivotIndex(word);
+        
+        this.elLeft.textContent = word.slice(0, pivotIdx);
+        this.elPivot.textContent = word[pivotIdx] || "";
+        this.elRight.textContent = word.slice(pivotIdx + 1);
+      }
+
+      calculateDelay(word) {
+        const baseWPM = parseInt(this.wpmInput.value) || 300;
+        let delay = 60000 / baseWPM;
+        
+        const lastChar = word.slice(-1);
+        const lastTwo = word.slice(-2);
+        
+        if (['.', '!', '?'].includes(lastChar) || ['.', '!', '?'].includes(lastTwo[1])) {
+             delay *= 2.2; 
+        } else if ([',', ';', ':'].includes(lastChar)) {
+             delay *= 1.5;
+        } else if (word.length > 8) {
+             delay *= 1.3;
+        }
+        return delay;
+      }
+
+      toggle() {
+        if (this.isPlaying) this.stop();
+        else this.start();
+      }
+
+      async start() {
+        if (this.words.length === 0 || this.index >= this.words.length) {
+          this.words = this.processText();
+          this.index = 0;
+          if (this.words.length === 0) return;
+        }
+        
+        this.isPlaying = true;
+        this.toggleBtn.textContent = "Pause";
+        this.toggleBtn.style.background = "#4b5563"; 
+        this.input.disabled = true;
+        this.clearBtn.disabled = true;
+        
+        await this.requestWakeLock();
+        this.loop();
+      }
+
+      stop() {
+        this.isPlaying = false;
+        clearTimeout(this.timer);
+        this.toggleBtn.textContent = "Resume";
+        this.toggleBtn.style.background = "#111827"; 
+        this.input.disabled = false;
+        this.clearBtn.disabled = false;
+        
+        this.releaseWakeLock();
+        
+        if (this.index > 0) {
+            this.index = Math.max(0, this.index - 5);
+            this.renderWord(this.words[this.index]);
+            this.updateProgress();
+        }
+      }
+      
+      reset() {
+        this.stop();
+        this.index = 0;
+        this.words = this.processText();
+        this.toggleBtn.textContent = "Start Reading";
+        this.renderWord("Ready");
+        this.progressBar.style.width = "0%";
+        this.wpmDisplay.textContent = "0%";
+      }
+      
+      clearText() {
+        this.stop();
+        this.input.value = "";
+        this.input.focus();
+        this.words = [];
+        this.index = 0;
+        this.renderWord("Ready");
+        this.progressBar.style.width = "0%";
+        this.wpmDisplay.textContent = "0%";
+        this.toggleBtn.textContent = "Start Reading";
+      }
+
+      loop() {
+        if (!this.isPlaying) return;
+
+        if (this.index >= this.words.length) {
+          this.stop();
+          this.toggleBtn.textContent = "Start Again";
+          this.index = 0; 
+          return;
+        }
+
+        const currentWord = this.words[this.index];
+        this.renderWord(currentWord);
+        this.updateProgress();
+
+        const delay = this.calculateDelay(currentWord);
+        this.index++;
+        
+        this.timer = setTimeout(() => this.loop(), delay);
+      }
+
+      updateProgress() {
+        const total = this.words.length || 1; 
+        const pct = Math.floor((this.index / total) * 100);
+        this.progressBar.style.width = `${pct}%`;
+        this.wpmDisplay.textContent = `${pct}%`;
+      }
+    }
+
+    const reader = new RSVPReader();
+  </script>
+</body>
+</html>
